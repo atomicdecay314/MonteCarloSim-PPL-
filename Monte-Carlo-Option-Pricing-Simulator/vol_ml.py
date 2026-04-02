@@ -36,57 +36,95 @@ def _rsi(close: pd.Series, window: int = 14) -> pd.Series:
 
 
 def _engineer_features(close: pd.Series) -> pd.DataFrame:
-    """Return a DataFrame of features aligned to the same index as *close*."""
+    """Return a DataFrame of features aligned to the same index as *close*.
+
+    Feature groups
+    --------------
+    HAR-RV  : Corsi (2009) heterogeneous AR components — daily/weekly/monthly
+               average realized vol.  These three features alone explain most
+               of forecastable vol variation.
+    RV lags : rolling realized vol at 5/21/63-day horizons plus explicit lags
+               of rv21 (autocorrelation proxy).
+    ARCH    : squared and absolute log returns, and 5-day max |return| (jump
+               indicator).  Capture ARCH/GARCH vol-clustering effects.
+    BB width: normalized Bollinger Band width — a pure vol-of-price signal,
+              not a price-level feature.
+    RSI     : momentum indicator; high/low RSI often precedes vol spikes.
+
+    Deliberately excluded: price/MA ratios (ma50_ratio etc.) — these are
+    price-trend features that dominate importance but add no vol-forecasting
+    signal, causing out-of-sample degradation.
+    """
     log_ret = np.log(close / close.shift(1))
 
-    # Realized vol (annualized) at multiple lookback windows
+    # ── HAR-RV components (Corsi 2009) ────────────────────────────────────────
+    # Use |log_ret| * sqrt(252) as the daily annualised RV proxy, then average.
+    rv1_proxy = log_ret.abs() * np.sqrt(252)
+    rv_har_d  = rv1_proxy.shift(1)                     # yesterday's daily RV
+    rv_har_w  = rv1_proxy.rolling(5).mean().shift(1)   # past 5-day avg RV
+    rv_har_m  = rv1_proxy.rolling(22).mean().shift(1)  # past 22-day avg RV
+
+    # ── Rolling realized vol at multiple horizons ─────────────────────────────
     rv5  = log_ret.rolling(5).std()  * np.sqrt(252)
-    rv10 = log_ret.rolling(10).std() * np.sqrt(252)
     rv21 = log_ret.rolling(21).std() * np.sqrt(252)
     rv63 = log_ret.rolling(63).std() * np.sqrt(252)
 
-    # Moving averages and price ratios
-    ma20       = close.rolling(20).mean()
-    ma50       = close.rolling(50).mean()
-    ma20_ratio = close / ma20
-    ma50_ratio = close / ma50
+    # Explicit lagged rv21 (autocorrelation of realized vol)
+    rv21_lag1 = rv21.shift(1)
+    rv21_lag5 = rv21.shift(5)
 
-    # Bollinger Bands (20-day, ±2σ)
+    # ── ARCH-effect features ──────────────────────────────────────────────────
+    sq_ret  = log_ret ** 2
+    abs_ret = log_ret.abs()
+    jump_5d = log_ret.abs().rolling(5).max()   # largest |return| in 5 days
+
+    # ── Bollinger Band width (vol-regime signal, not price-level) ─────────────
+    ma20     = close.rolling(20).mean()
     bb_std   = close.rolling(20).std()
-    bb_upper = ma20 + 2.0 * bb_std
-    bb_lower = ma20 - 2.0 * bb_std
-    bb_width = (bb_upper - bb_lower) / ma20
-    band_range = (bb_upper - bb_lower).replace(0.0, np.nan)
-    bb_pct   = (close - bb_lower) / band_range   # 0 = at lower, 1 = at upper band
+    bb_width = (4.0 * bb_std) / ma20.replace(0.0, np.nan)
 
-    # RSI (14-day)
+    # ── RSI ───────────────────────────────────────────────────────────────────
     rsi = _rsi(close, window=14)
 
     return pd.DataFrame({
-        'log_ret':    log_ret,
-        'rv5':        rv5,
-        'rv10':       rv10,
-        'rv21':       rv21,
-        'rv63':       rv63,
-        'ma20_ratio': ma20_ratio,
-        'ma50_ratio': ma50_ratio,
-        'bb_width':   bb_width,
-        'bb_pct':     bb_pct,
-        'rsi':        rsi,
+        'rv_har_d':  rv_har_d,
+        'rv_har_w':  rv_har_w,
+        'rv_har_m':  rv_har_m,
+        'rv5':       rv5,
+        'rv21':      rv21,
+        'rv63':      rv63,
+        'rv21_lag1': rv21_lag1,
+        'rv21_lag5': rv21_lag5,
+        'sq_ret':    sq_ret,
+        'abs_ret':   abs_ret,
+        'jump_5d':   jump_5d,
+        'bb_width':  bb_width,
+        'rsi':       rsi,
     }, index=close.index)
 
 
 # ── Model Training ────────────────────────────────────────────────────────────
 
-def train_vol_model(ticker: str = 'SPY', period: str = '2y'):
+def train_vol_model(ticker: str = 'SPY', period: str = '5y'):
     """
     Download historical data, build features, and train a Random Forest to
     predict the 21-day forward realized volatility.
 
+    Improvements over the naive version
+    ------------------------------------
+    * 5y of data (more independent vol regimes to learn from).
+    * HAR-RV + ARCH features instead of price-ratio features.
+    * Target log-transformed before fitting; predictions are exp()-back-
+      transformed — vol is approximately log-normal so this reduces
+      heteroscedastic residuals and stabilises the loss surface.
+    * Rows sampled every 5 days (stride=5) to reduce the 95% overlap
+      between consecutive 21-day rolling targets, giving the train/test
+      split more independent observations to evaluate on.
+
     Parameters
     ----------
     ticker : str   Yahoo Finance ticker (default 'SPY').
-    period : str   yfinance period string (default '2y').
+    period : str   yfinance period string (default '5y').
 
     Returns
     -------
@@ -116,31 +154,44 @@ def train_vol_model(ticker: str = 'SPY', period: str = '2y'):
     data['target'] = target
     data           = data.dropna()
 
+    # Stride every 5 rows: cuts target overlap from ~95 % to ~76 %,
+    # giving the CV split meaningfully more independent observations.
+    data = data.iloc[::5].copy()
+
     feature_names = [c for c in data.columns if c != 'target']
     X = data[feature_names].values
     y = data['target'].values
 
+    # Log-transform: vol is approximately log-normal; predicting log(vol)
+    # stabilises variance and usually improves R².
+    log_y = np.log(y.clip(min=1e-6))
+
     # --- temporal train / test split (no shuffle) ---------------------------
-    split   = int(len(data) * 0.8)
-    X_train = X[:split];  y_train = y[:split]
-    X_test  = X[split:];  y_test  = y[split:]
+    split    = int(len(data) * 0.8)
+    X_train  = X[:split];     log_y_train = log_y[:split]
+    X_test   = X[split:];     y_test      = y[split:]
 
     print(f"[vol_ml] Training Random Forest  "
-          f"({split} train / {len(X_test)} test samples)…")
+          f"({split} train / {len(X_test)} test samples, stride=5)…")
     model = RandomForestRegressor(
-        n_estimators=300,
-        max_depth=8,
-        min_samples_leaf=5,
+        n_estimators=500,
+        max_depth=6,
+        min_samples_leaf=3,
+        max_features='sqrt',
         random_state=42,
         n_jobs=-1,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, log_y_train)
 
-    oos_r2 = r2_score(y_test, model.predict(X_test))
+    # Evaluate in original vol space
+    y_pred_test = np.exp(model.predict(X_test))
+    oos_r2 = r2_score(y_test, y_pred_test)
     print(f"[vol_ml] Out-of-sample R²: {oos_r2:.4f}")
 
-    # --- predict on the most-recent feature row -----------------------------
-    predicted_vol = float(model.predict(X[[-1]])[0])
+    # --- predict on the most-recent feature row (all data, then exp) --------
+    # Refit on full dataset so prediction uses all available information.
+    model.fit(X, log_y)
+    predicted_vol = float(np.exp(model.predict(X[[-1]])[0]))
 
     # --- trailing 21-day realized vol (simple historical baseline) ----------
     hist_vol = float(log_ret.iloc[-21:].std() * np.sqrt(252))
