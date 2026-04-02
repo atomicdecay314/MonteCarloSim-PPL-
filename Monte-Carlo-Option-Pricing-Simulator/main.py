@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from utils import (simulate_gbm_paths, simulate_mjd_paths,
                    monte_carlo_option_price, black_scholes_price, merton_price)
+from vol_ml import train_vol_model, get_implied_vol
 
 # Set matplotlib dark theme
 def set_dark_theme():
@@ -130,6 +131,104 @@ print(f"Put  diff vs B-S  |  MC-GBM: {diff_put:+.4f}  "
       f"MC-MJD: {diff_mjd_put:+.4f}  Merton: {diff_merton_put:+.4f}")
 
 ani = animation.FuncAnimation(fig, animate, frames=steps+1, interval=20, blit=True)  # noqa: F841
+
+# ── ML Volatility Prediction & Comparison Plot ────────────────────────────────
+TICKER = 'SPY'   # ticker used for history download and options chain
+
+print("\n" + "=" * 60)
+print("ML Volatility Prediction")
+print("=" * 60)
+pred_vol, hist_vol_ml, rf_r2, feat_imp = train_vol_model(TICKER, period='2y')
+impl_vol = get_implied_vol(TICKER, T=T, option_type='call')
+
+if impl_vol is None:
+    print("[vol_ml] Implied vol unavailable — substituting historical vol.")
+    impl_vol = hist_vol_ml
+
+# Scenario labels (shown on x-axis of comparison plot)
+vol_scenarios = {
+    f'RF Predicted\n(σ={pred_vol:.3f})':   pred_vol,
+    f'Historical\n(σ={hist_vol_ml:.3f})':  hist_vol_ml,
+    f'Market Implied\n(σ={impl_vol:.3f})': impl_vol,
+}
+
+# Price each scenario with MC and Black-Scholes
+print("\nRunning MC simulations for each vol scenario…")
+scenario_results = {}
+for label, vol in vol_scenarios.items():
+    _, sc_paths = simulate_gbm_paths(S0, r, vol, T, steps, n_paths)
+    scenario_results[label] = {
+        'vol':     vol,
+        'mc_call': monte_carlo_option_price(sc_paths, K, r, T, 'call'),
+        'mc_put':  monte_carlo_option_price(sc_paths, K, r, T, 'put'),
+        'bs_call': black_scholes_price(S0, K, r, vol, T, 'call'),
+        'bs_put':  black_scholes_price(S0, K, r, vol, T, 'put'),
+    }
+
+# ── Comparison figure ─────────────────────────────────────────────────────────
+fig2, axes = plt.subplots(1, 2, figsize=(14, 6))
+fig2.suptitle(
+    f'Option Price by Volatility Scenario  ·  {TICKER}  ·  RF out-of-sample R² = {rf_r2:.3f}',
+    fontsize=13, color='white',
+)
+
+labels = list(scenario_results.keys())
+x      = np.arange(len(labels))
+width  = 0.35
+
+for ax, opt_key, title in zip(axes, ['call', 'put'], ['Call Options', 'Put Options']):
+    mc_prices = [scenario_results[l][f'mc_{opt_key}'] for l in labels]
+    bs_prices = [scenario_results[l][f'bs_{opt_key}'] for l in labels]
+
+    bars_mc = ax.bar(x - width / 2, mc_prices, width,
+                     label='Monte Carlo', color='#FFD700', alpha=0.85)
+    bars_bs = ax.bar(x + width / 2, bs_prices, width,
+                     label='Black-Scholes', color='#00CED1', alpha=0.85)
+
+    ax.set_title(title, color='white', fontsize=11)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_ylabel('Option Price ($)', color='white')
+    ax.legend(fontsize=9, framealpha=0.4)
+
+    # Value labels on bars
+    for bar in list(bars_mc) + list(bars_bs):
+        h = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width() / 2, h + 0.03,
+                f'{h:.2f}', ha='center', va='bottom', fontsize=8, color='white')
+
+# Feature importance inset on the right subplot (top-5 features)
+top_feats = sorted(feat_imp.items(), key=lambda kv: kv[1], reverse=True)[:5]
+f_names   = [kv[0] for kv in top_feats]
+f_vals    = [kv[1] for kv in top_feats]
+ax_ins = axes[1].inset_axes([0.60, 0.52, 0.38, 0.42])
+ax_ins.cla()
+ax_ins.barh(list(range(len(f_names))), f_vals[::-1], color='#FF6B35', alpha=0.8)
+ax_ins.set_yticks(list(range(len(f_names))))
+ax_ins.set_yticklabels(f_names[::-1])
+ax_ins.set_title('RF Top Features', fontsize=7, color='white')
+ax_ins.tick_params(labelsize=6)
+ax_ins.set_facecolor('#2a2a2a')
+for spine in ax_ins.spines.values():
+    spine.set_edgecolor('#555555')
+
+fig2.tight_layout()
+
+# ── Print summary table ───────────────────────────────────────────────────────
+print("\nVol-Scenario Pricing Summary:")
+rows = []
+for label, res in scenario_results.items():
+    clean = label.replace('\n', ' ')
+    rows.append({
+        'Scenario': clean,
+        'σ':        f"{res['vol']:.4f}",
+        'MC Call':  f"{res['mc_call']:.4f}",
+        'BS Call':  f"{res['bs_call']:.4f}",
+        'MC Put':   f"{res['mc_put']:.4f}",
+        'BS Put':   f"{res['bs_put']:.4f}",
+    })
+print(pd.DataFrame(rows).to_string(index=False))
+print("=" * 60 + "\n")
 
 plt.tight_layout()
 plt.show()

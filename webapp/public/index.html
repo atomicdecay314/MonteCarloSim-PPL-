@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monte Carlo Option Pricing Simulator</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":            "https://unpkg.com/three@0.163.0/build/three.module.js",
+      "three/addons/":    "https://unpkg.com/three@0.163.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <h1>Monte Carlo Option Pricing Simulator</h1>
+  <span class="subtitle">GBM · Black-Scholes · Merton Jump Diffusion</span>
+</header>
+
+<!-- ── Main row ────────────────────────────────────────────────────────────── -->
+<div class="main-row">
+
+  <!-- Controls -->
+  <aside class="controls">
+    <h2>Stock Lookup</h2>
+    <div class="ticker-row">
+      <input id="ticker" type="text" placeholder="e.g. AAPL" maxlength="8" spellcheck="false" />
+      <button id="btn-fetch">Fetch</button>
+    </div>
+    <div id="ticker-status"></div>
+
+    <h2>Market Parameters</h2>
+
+    <div class="field">
+      <label>S₀</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="S0">−</button>
+        <input id="S0"    type="number" value="100"  step="1"    min="1" />
+        <button class="nf-inc" data-target="S0">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>K</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="K">−</button>
+        <input id="K"     type="number" value="100"  step="1"    min="1" />
+        <button class="nf-inc" data-target="K">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>r</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="r">−</button>
+        <input id="r"     type="number" value="0.05" step="0.01" min="0" />
+        <button class="nf-inc" data-target="r">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>σ</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="sigma">−</button>
+        <input id="sigma" type="number" value="0.20" step="0.01" min="0.01" />
+        <button class="nf-inc" data-target="sigma">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>T (yr)</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="T">−</button>
+        <input id="T"     type="number" value="1.0"  step="0.25" min="0.1" />
+        <button class="nf-inc" data-target="T">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Paths</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="nPaths">−</button>
+        <input id="nPaths" type="number" value="200" step="50"  min="50" max="2000" />
+        <button class="nf-inc" data-target="nPaths">+</button>
+      </div>
+    </div>
+
+    <h2>Jump Parameters (MJD)</h2>
+
+    <div class="field">
+      <label>λ</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="lam">−</button>
+        <input id="lam"    type="number" value="1.0"  step="0.1"  min="0" />
+        <button class="nf-inc" data-target="lam">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>μⱼ</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="muJ">−</button>
+        <input id="muJ"    type="number" value="-0.10" step="0.01" />
+        <button class="nf-inc" data-target="muJ">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>σⱼ</label>
+      <div class="num-field">
+        <button class="nf-dec" data-target="sigmaJ">−</button>
+        <input id="sigmaJ" type="number" value="0.15" step="0.01" min="0.01" />
+        <button class="nf-inc" data-target="sigmaJ">+</button>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-run">&#9654; Run Simulation</button>
+      <button id="btn-greeks">Greeks &#9660;</button>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#FFD700"></div>
+        GBM paths
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#FF6B35"></div>
+        MJD paths
+      </div>
+    </div>
+
+    <p style="margin-top:12px;font-size:10px;color:#555;line-height:1.5">
+      Drag to orbit<br>Scroll to zoom<br>Press R to rerun
+    </p>
+  </aside>
+
+  <!-- Three.js canvas -->
+  <div class="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div class="canvas-hint">Drag to orbit · Scroll to zoom</div>
+  </div>
+
+</div><!-- /.main-row -->
+
+<!-- ── Bottom: table + Greeks ──────────────────────────────────────────────── -->
+<div class="bottom">
+
+  <!-- Price table -->
+  <div class="price-section">
+    <h3>Option Price Comparison</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th class="highlight-call">Call Price ($)</th>
+          <th class="highlight-put">Put Price ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>MC (GBM)</td>
+          <td id="row-mc-call"     class="placeholder">—</td>
+          <td id="row-mc-put"      class="placeholder">—</td>
+        </tr>
+        <tr>
+          <td>MC (MJD)</td>
+          <td id="row-mjd-call"    class="placeholder">—</td>
+          <td id="row-mjd-put"     class="placeholder">—</td>
+        </tr>
+        <tr>
+          <td>Black-Scholes</td>
+          <td id="row-bs-call"     class="placeholder">—</td>
+          <td id="row-bs-put"      class="placeholder">—</td>
+        </tr>
+        <tr>
+          <td>Merton</td>
+          <td id="row-merton-call" class="placeholder">—</td>
+          <td id="row-merton-put"  class="placeholder">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Greeks panel (hidden by default) -->
+  <div id="greeks-panel">
+    <h3>
+      Option Greeks — Black-Scholes (gold) vs Monte Carlo finite diff (cyan)
+    </h3>
+    <div class="greeks-grid">
+      <div class="greek-card">
+        <h4>Delta (Δ)</h4>
+        <canvas id="canvas-delta"></canvas>
+      </div>
+      <div class="greek-card">
+        <h4>Gamma (Γ)</h4>
+        <canvas id="canvas-gamma"></canvas>
+      </div>
+      <div class="greek-card">
+        <h4>Vega (ν) per 1% vol</h4>
+        <canvas id="canvas-vega"></canvas>
+      </div>
+      <div class="greek-card">
+        <h4>Theta (Θ) per day</h4>
+        <canvas id="canvas-theta"></canvas>
+      </div>
+    </div>
+    <div class="greeks-legend">
+      <span><span class="swatch" style="background:#FFD700"></span> Black-Scholes (analytical)</span>
+      <span><span class="swatch" style="background:#00BFFF;border-top:1px dashed #00BFFF"></span> Monte Carlo (finite diff)</span>
+      <span><span class="swatch" style="background:#FF6B6B"></span> Current spot</span>
+      <span><span class="swatch" style="background:#98FB98"></span> Strike</span>
+    </div>
+  </div>
+
+</div><!-- /.bottom -->
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
