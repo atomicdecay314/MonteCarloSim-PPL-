@@ -138,7 +138,7 @@ TICKER = 'SPY'   # ticker used for history download and options chain
 print("\n" + "=" * 60)
 print("ML Volatility Prediction")
 print("=" * 60)
-pred_vol, hist_vol_ml, rf_r2, feat_imp = train_vol_model(TICKER, period='2y')
+pred_vol, hist_vol_ml, rf_r2, feat_imp = train_vol_model(TICKER, period='5y')
 impl_vol = get_implied_vol(TICKER, T=T, option_type='call')
 
 if impl_vol is None:

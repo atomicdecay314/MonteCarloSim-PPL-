@@ -203,8 +203,8 @@ def main():
         option_type = 'call'
 
     # ── Download data ─────────────────────────────────────────────────────────
-    print(f"\nDownloading 2y of {ticker} daily data …")
-    raw = yf.download(ticker, period='2y', auto_adjust=True, progress=False)
+    print(f"\nDownloading 5y of {ticker} daily data …")
+    raw = yf.download(ticker, period='5y', auto_adjust=True, progress=False)
     if isinstance(raw.columns, pd.MultiIndex):
         raw.columns = raw.columns.get_level_values(0)
     close = raw['Close'].squeeze()
@@ -214,7 +214,7 @@ def main():
 
     # ── Train model ───────────────────────────────────────────────────────────
     print(f"\nTraining Random Forest  (TimeSeriesSplit, 5 folds) …")
-    pred_vol, hist_vol, r2, feat_imp = train_vol_model(ticker, period='2y')
+    pred_vol, hist_vol, r2, feat_imp = train_vol_model(ticker, period='5y')
     cv_r2   = [r2]
     feat_df = None
     print(f"\n  RF predicted vol (next 21d): {pred_vol:.4f}")

@@ -49,7 +49,7 @@
       <label>K</label>
       <div class="num-field">
         <button class="nf-dec" data-target="K">−</button>
-        <input id="K"     type="number" value="100"  step="1"    min="1" />
+        <input id="K"     type="number" value="100"  step="5"    min="1" />
         <button class="nf-inc" data-target="K">+</button>
       </div>
     </div>
@@ -62,7 +62,7 @@
       </div>
     </div>
     <div class="field">
-      <label>σ</label>
+      <label><span id="sigma-label">σ</span><span id="sigma-live-badge" class="live-badge" style="display:none">LIVE</span></label>
       <div class="num-field">
         <button class="nf-dec" data-target="sigma">−</button>
         <input id="sigma" type="number" value="0.20" step="0.01" min="0.01" />
@@ -154,31 +154,46 @@
           <th>Method</th>
           <th class="highlight-call">Call Price ($)</th>
           <th class="highlight-put">Put Price ($)</th>
+          <th class="highlight-delta">Δ vs B-S</th>
+          <th>σ</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
+        <tr class="row-gbm">
           <td>MC (GBM)</td>
-          <td id="row-mc-call"     class="placeholder">—</td>
-          <td id="row-mc-put"      class="placeholder">—</td>
+          <td id="row-mc-call"      class="placeholder">—</td>
+          <td id="row-mc-put"       class="placeholder">—</td>
+          <td id="row-mc-delta"     class="placeholder">—</td>
+          <td id="row-mc-sigma"     class="placeholder">—</td>
         </tr>
-        <tr>
+        <tr class="row-mjd">
           <td>MC (MJD)</td>
-          <td id="row-mjd-call"    class="placeholder">—</td>
-          <td id="row-mjd-put"     class="placeholder">—</td>
+          <td id="row-mjd-call"     class="placeholder">—</td>
+          <td id="row-mjd-put"      class="placeholder">—</td>
+          <td id="row-mjd-delta"    class="placeholder">—</td>
+          <td id="row-mjd-sigma"    class="placeholder">—</td>
         </tr>
-        <tr>
+        <tr class="row-bs">
           <td>Black-Scholes</td>
-          <td id="row-bs-call"     class="placeholder">—</td>
-          <td id="row-bs-put"      class="placeholder">—</td>
+          <td id="row-bs-call"      class="placeholder">—</td>
+          <td id="row-bs-put"       class="placeholder">—</td>
+          <td id="row-bs-delta"     class="placeholder">—</td>
+          <td id="row-bs-sigma"     class="placeholder">—</td>
         </tr>
-        <tr>
+        <tr class="row-merton">
           <td>Merton</td>
-          <td id="row-merton-call" class="placeholder">—</td>
-          <td id="row-merton-put"  class="placeholder">—</td>
+          <td id="row-merton-call"  class="placeholder">—</td>
+          <td id="row-merton-put"   class="placeholder">—</td>
+          <td id="row-merton-delta" class="placeholder">—</td>
+          <td id="row-merton-sigma" class="placeholder">—</td>
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- Interpretation panel -->
+  <div id="interp-panel" class="interp-panel" style="display:none">
+    <p id="interp-text"></p>
   </div>
 
   <!-- Greeks panel (hidden by default) -->
