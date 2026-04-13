@@ -241,17 +241,29 @@ def live_market(ticker: str = Query(..., min_length=1, max_length=10)):
 @app.post("/api/predict-vol")
 def predict_vol(p: VolPredictParams):
     try:
-        predicted_vol, hist_vol, r2, feat_importances = train_vol_model(
-            p.ticker.upper(), period="5y"
-        )
+        m = train_vol_model(p.ticker.upper(), period="5y")
         implied_vol = get_implied_vol(p.ticker.upper(), p.S0, p.T, p.optionType)
+
+        # r2 = best model's mean CV R² (backward-compat field)
+        r2_rf  = m['r2_rf']
+        r2_xgb = m['r2_xgb']
+        best_r2 = r2_xgb if (r2_xgb is not None and r2_xgb > r2_rf) else r2_rf
+
+        xgb_fi = m['xgb_feat_importances']
         return {
-            "ticker": p.ticker.upper(),
-            "predicted_vol": _safe(predicted_vol),
-            "hist_vol": _safe(hist_vol),
-            "implied_vol": _safe(implied_vol) if implied_vol else None,
-            "r2": _safe(r2),
-            "feat_importances": {k: _safe(v) for k, v in feat_importances.items()},
+            "ticker":               p.ticker.upper(),
+            "predicted_vol":        _safe(m['predicted_vol']),
+            "rf_predicted_vol":     _safe(m['rf_predicted_vol']),
+            "xgb_predicted_vol":    _safe(m['xgb_predicted_vol']) if m['xgb_predicted_vol'] is not None else None,
+            "hist_vol":             _safe(m['hist_vol']),
+            "baseline_vol":         _safe(m['baseline_vol']),
+            "implied_vol":          _safe(implied_vol) if implied_vol else None,
+            "r2":                   _safe(best_r2),
+            "r2_rf":                _safe(r2_rf),
+            "r2_xgb":               _safe(r2_xgb) if r2_xgb is not None else None,
+            "r2_baseline":          _safe(m['r2_baseline']),
+            "feat_importances":     {k: _safe(v) for k, v in m['feat_importances'].items()},
+            "xgb_feat_importances": {k: _safe(v) for k, v in xgb_fi.items()} if xgb_fi else None,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

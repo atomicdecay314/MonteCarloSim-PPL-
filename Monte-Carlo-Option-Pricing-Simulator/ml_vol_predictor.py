@@ -213,12 +213,19 @@ def main():
     print(f"  Current price: ${S0:.2f}  |  Using K=${K:.0f}")
 
     # ── Train model ───────────────────────────────────────────────────────────
-    print(f"\nTraining Random Forest  (TimeSeriesSplit, 5 folds) …")
-    pred_vol, hist_vol, r2, feat_imp = train_vol_model(ticker, period='5y')
-    cv_r2   = [r2]
-    feat_df = None
-    print(f"\n  RF predicted vol (next 21d): {pred_vol:.4f}")
-    print(f"  2y historical vol:           {hist_vol:.4f}")
+    print(f"\nTraining RF + XGBoost  (TimeSeriesSplit, 5 folds, target=5d RV) …")
+    m        = train_vol_model(ticker, period='5y')
+    pred_vol = m['predicted_vol']
+    hist_vol = m['hist_vol']
+    feat_imp = m['feat_importances']
+    cv_r2    = [m['r2_rf']]
+    feat_df  = None
+    print(f"\n  Best predicted vol (next 5d): {pred_vol:.4f}")
+    print(f"  RF  predicted vol:            {m['rf_predicted_vol']:.4f}  (CV R²={m['r2_rf']:+.4f})")
+    if m['xgb_predicted_vol'] is not None:
+        print(f"  XGB predicted vol:            {m['xgb_predicted_vol']:.4f}  (CV R²={m['r2_xgb']:+.4f})")
+    print(f"  30d baseline vol:             {m['baseline_vol']:.4f}  (CV R²={m['r2_baseline']:+.4f})")
+    print(f"  21d historical vol:           {hist_vol:.4f}")
 
     # ── Implied vol ───────────────────────────────────────────────────────────
     print(f"\nFetching ATM implied vol for {ticker} …")
@@ -239,7 +246,7 @@ def main():
     vol_map = {
         f'RF Predicted\n(σ={pred_vol:.3f})': pred_vol,
         f'Historical\n(σ={hist_vol:.3f})':   hist_vol,
-        f'Implied\n(σ={impl_vol:.3f})':      impl_vol,
+        f'Implied\n(σ={impl_vol:.3f})':          impl_vol,
     }
     for label, vol in vol_map.items():
         res = price_scenario(S0, K, vol)

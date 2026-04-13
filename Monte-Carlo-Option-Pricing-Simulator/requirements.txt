@@ -4,5 +4,6 @@ matplotlib
 scipy
 yfinance
 scikit-learn
+xgboost
 fastapi
 uvicorn[standard]
