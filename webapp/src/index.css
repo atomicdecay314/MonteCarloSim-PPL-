@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    min-height: 100vh;
+  }
+
+  body {
+    @apply bg-surface-lowest text-on-surface font-body;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* JetBrains Mono for all numbers in .font-mono elements */
+  .font-mono * {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Glass card — the primary surface component */
+  .glass-card {
+    background: rgba(29, 31, 38, 0.65);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    @apply rounded-xl shadow-glass;
+  }
+
+  /* Ghost border variant for subtle dividers */
+  .ghost-border {
+    border: 1px solid rgba(67, 70, 85, 0.10);
+  }
+
+  /* Pulsing live badge */
+  .live-dot {
+    @apply inline-block w-2 h-2 rounded-full bg-tertiary;
+    box-shadow: 0 0 8px rgba(78, 222, 163, 0.4);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Gradient primary button */
+  .btn-primary {
+    background: linear-gradient(135deg, #b4c5ff 0%, #2563eb 100%);
+    @apply text-on-primary font-label font-medium px-4 py-2 rounded-lg transition-all duration-200;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+    backdrop-filter: blur(16px);
+  }
+
+  /* Segmented control (tab switcher) */
+  .seg-track {
+    @apply bg-surface-high rounded-full p-1 flex gap-1;
+  }
+  .seg-pill {
+    @apply px-4 py-1.5 rounded-full text-sm font-label font-medium transition-all duration-200 cursor-pointer;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    color: theme('colors.on-surface-variant');
+  }
+  .seg-pill.active {
+    @apply bg-surface-bright text-on-surface;
+  }
+
+  /* Number field inputs */
+  .num-input {
+    @apply bg-surface-high border border-outline-variant rounded-lg px-3 py-2
+           font-mono text-sm text-on-surface w-full
+           focus:outline-none focus:border-primary transition-colors;
+  }
+
+  /* Label small — all-caps data header */
+  .label-xs {
+    @apply text-xs font-label uppercase tracking-widest text-on-surface-variant;
+  }
+
+  /* Scrollbar styling for deep-space feel */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-outline-variant rounded-full;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(78, 222, 163, 0.4); }
+  50%       { opacity: 0.6; box-shadow: 0 0 4px rgba(78, 222, 163, 0.2); }
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  line-height: 1;
+}

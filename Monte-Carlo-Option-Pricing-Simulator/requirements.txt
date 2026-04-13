@@ -4,3 +4,5 @@ matplotlib
 scipy
 yfinance
 scikit-learn
+fastapi
+uvicorn[standard]

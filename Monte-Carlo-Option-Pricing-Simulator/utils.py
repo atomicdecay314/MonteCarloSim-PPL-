@@ -77,12 +77,13 @@ def merton_price(S0, K, r, sigma, T, lam, mu_j, sigma_j, option_type='call', n_t
     Conditions on exactly n jumps in [0,T] (Poisson-weighted BS prices):
       σₙ = √(σ² + n·σⱼ²/T)
       rₙ = r − λk̄ + n·(μⱼ + σⱼ²/2) / T
-      weight = P(N(T) = n) = Poisson PMF at λT
+      weight = P(N(T) = n) = Poisson PMF at λ'T  (λ' = λ·exp(μⱼ + σⱼ²/2), risk-neutral intensity)
     """
     k_bar = np.exp(mu_j + 0.5 * sigma_j ** 2) - 1
+    lam_prime = lam * np.exp(mu_j + 0.5 * sigma_j ** 2)  # risk-neutral intensity
     price = 0.0
     for n in range(n_terms):
-        weight = poisson.pmf(n, lam * T)
+        weight = poisson.pmf(n, lam_prime * T)
         if weight < 1e-12:          # series has converged
             break
         sigma_n = np.sqrt(sigma ** 2 + n * sigma_j ** 2 / T)
