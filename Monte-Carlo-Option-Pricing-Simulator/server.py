@@ -40,9 +40,11 @@ from vol_ml import train_vol_model, get_implied_vol
 
 app = FastAPI(title="QuantSim Pro API", version="2.4.0")
 
+_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
